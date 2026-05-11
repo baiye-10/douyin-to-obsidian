@@ -16,7 +16,7 @@
 
 ```bash
 # 如果是GitHub项目
-git clone https://github.com/你的用户名/douyin-to-obsidian.git
+git clone https://github.com/13149025315/douyin-to-obsidian.git
 ```
 
 ### 2. 安装依赖
