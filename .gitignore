@@ -1,0 +1,40 @@
+
+# 用户的配置文件（不要上传到GitHub）
+config.py
+
+# 临时文件
+douyin_temp/
+*.mp3
+*.mp4
+*.wav
+*_transcript.txt
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
