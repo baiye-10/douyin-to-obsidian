@@ -1,54 +1,125 @@
-# douyin-to-obsidian 优化版
+# douyin-to-obsidian
 
-## 优化内容
+抖音视频自动转 Obsidian 笔记的 Trae/Claude 技能。解析链接、下载无水印视频、Whisper 本地语音识别、自动修正错字、生成结构化 Obsidian 笔记。
 
-这是对原 skill 的优化，解决了你遇到的问题：
+## 功能
 
-### ✅ 问题1：文件保存位置
-- **原问题**：文件保存到 `D:/一人公司/自媒体/`，需要手动复制到 Obsidian
-- **现在**：**直接保存到 `D:/TRAE_SOLO/obsidian文件`**，无需手动操作
+- 🔗 解析抖音分享链接，获取视频信息和下载地址
+- 📥 下载无水印视频
+- 🎙️ 使用 Whisper 本地语音识别（中文优化）
+- ✏️ 自动修正常见识别错误（可自定义修正规则）
+- 📝 生成带 Frontmatter 的 Obsidian 笔记
 
-### ✅ 问题2：Python 依赖问题
-- **原问题**：SOLO 内置 Python 缺少 whisper 和 setuptools
-- **现在**：自动使用 `D:/python.org/python.exe` 执行 Whisper 识别
+## 文件结构
 
-### ✅ 问题3：转录错字
-- **原问题**：Whisper 识别常见错字（"避允"→"毕昇"，"音乐局儿"→"Claude"）
-- **现在**：**自动修正错字**，可以通过 `text_corrections.json` 自定义
-
-### ✅ 其他优化
-- 自动生成 Frontmatter 的 Obsidian 笔记格式
-- 更友好的输出信息
-- 新增 `--no-audio` 选项
-
-## 文件说明
-
-| 文件 | 说明 |
-| ---- | ---- |
-| `douyin_to_obsidian.py` | 主脚本（优化版） |
-| `text_corrections.json` | 错字修正配置 |
-| `SKILL.md` | Skill 说明文档 |
-
-## 如何使用
-
-### 1. 在对话中直接使用
 ```
-总结这个抖音视频：[抖音链接]
+douyin-to-obsidian/
+├── SKILL.md                    # 技能定义文件
+├── douyin_to_obsidian.py       # 主脚本 - 完整工作流
+├── douyin_downloader.py        # 下载模块 - 视频解析和下载（内含）
+├── config.example.py           # 配置示例
+├── text_corrections.json       # 错字修正配置
+└── README.md                   # 本文件
 ```
 
-### 2. 自定义错字修正
-编辑 `text_corrections.json`，添加你需要的修正项：
+> `douyin_downloader.py` 已包含在本 skill 中，无需额外下载。
+
+## 安装
+
+### 1. 安装 Python 依赖
+
+```bash
+pip install requests ffmpeg-python openai-whisper moviepy imageio-ffmpeg
+```
+
+### 2. 配置
+
+复制 `config.example.py` 为 `config.py`，修改以下配置：
+
+```python
+OBSIDIAN_PATH = Path("你的Obsidian笔记仓库路径")
+TEMP_PATH = Path("临时文件目录")
+WHISPER_MODEL = "base"  # tiny, base, small, medium, large
+```
+
+如果不创建 `config.py`，脚本会使用默认值。
+
+### 3. FFmpeg
+
+Whisper 需要 FFmpeg。安装 `imageio-ffmpeg` 后会自动提供，无需手动安装。
+
+## 使用
+
+### 对话触发
+
+直接对 AI 助手说：
+- "总结这个抖音视频：[链接]"
+- "把这个视频导入Obsidian：[链接]"
+
+### 命令行
+
+```bash
+# 完整处理
+python douyin_to_obsidian.py --link "抖音分享链接"
+
+# 仅获取视频信息
+python douyin_to_obsidian.py --link "抖音分享链接" --no-audio
+
+# 保留临时文件
+python douyin_to_obsidian.py --link "抖音分享链接" --keep-temp
+```
+
+### 单独使用下载模块
+
+```bash
+python douyin_downloader.py --link "链接" --action info
+python douyin_downloader.py --link "链接" --action download --output ./videos
+python douyin_downloader.py --link "链接" --action extract --output ./output
+```
+
+## 输出示例
+
+```markdown
+---
+title: 视频标题
+tags: [抖音, 视频笔记, 2026]
+source: https://v.douyin.com/xxx
+date: 2026-05-14
+---
+
+# 视频标题
+
+## 原始内容
+
+（Whisper 转录的完整文本）
+
+## 笔记
+
+- 
+```
+
+## 自定义错字修正
+
+编辑 `text_corrections.json`：
 
 ```json
 {
-  "你的分类": {
-    "错误的词": "正确的词",
-    "另一个错词": "正确写法"
+  "common": {
+    "音乐局": "Claude",
+    "米游": "米哈游"
   }
 }
 ```
 
-## 更新日志
+## 故障排除
 
-- **v2.0 (当前)**：解决保存路径、依赖问题、自动修正
-- **v1.0**：原始版本
+| 问题 | 解决方案 |
+|------|---------|
+| 找不到 douyin_downloader.py | 确保该文件与 douyin_to_obsidian.py 在同一目录 |
+| Whisper 识别失败 | 检查 FFmpeg：`python -c "import imageio_ffmpeg; print(imageio_ffmpeg.get_ffmpeg_exe())"` |
+| 视频下载失败 | 重新获取抖音分享链接 |
+| Obsidian 路径错误 | 修改 config.py 中的 OBSIDIAN_PATH |
+
+## License
+
+MIT

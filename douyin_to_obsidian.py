@@ -1,34 +1,50 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-抖音视频自动下载和转录工具（优化版）
+抖音视频自动下载和转录工具
 功能：解析链接、下载视频、提取音频、Whisper 语音识别、自动修正错字、直接保存到 Obsidian
-优化内容：
-- 直接保存到 Obsidian 目录
-- 使用指定的 Python 路径避免依赖问题
-- 常见错字自动修正
-- 更友好的提示和配置
 """
 import sys
 import subprocess
 import argparse
 import re
 import json
+import os
 from pathlib import Path
 from datetime import datetime
 
-# 配置区域
-OBSIDIAN_PATH = Path("D:/TRAE_SOLO/obsidian文件")
-TEMP_PATH = Path("D:/一人公司/自媒体/douyin_temp")
-WHISPER_MODEL = "base"
-PYTHON_PATH = "D:/python.org/python.exe"
+SCRIPT_DIR = Path(__file__).parent
 
-# 加载文本修正配置
+def load_config():
+    config_path = SCRIPT_DIR / "config.py"
+    if config_path.exists():
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("config", str(config_path))
+        cfg = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(cfg)
+        return cfg
+    config_example = SCRIPT_DIR / "config.example.py"
+    if config_example.exists():
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("config_example", str(config_example))
+        cfg = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(cfg)
+        print("⚠️  未找到 config.py，使用默认配置。请复制 config.example.py 为 config.py 并修改路径。")
+        return cfg
+    print("⚠️  未找到配置文件，使用内置默认值。")
+    return None
+
+cfg = load_config()
+
+OBSIDIAN_PATH = getattr(cfg, 'OBSIDIAN_PATH', None) or Path.home() / "ObsidianVault"
+TEMP_PATH = getattr(cfg, 'TEMP_PATH', None) or SCRIPT_DIR / "douyin_temp"
+WHISPER_MODEL = getattr(cfg, 'WHISPER_MODEL', None) or "base"
+PYTHON_PATH = getattr(cfg, 'PYTHON_PATH', None) or sys.executable
+
 TEXT_CORRECTIONS = {}
-corr_file = Path(__file__).parent / "text_corrections.json"
+corr_file = SCRIPT_DIR / "text_corrections.json"
 if corr_file.exists():
     try:
-        import json
         with open(corr_file, 'r', encoding='utf-8') as f:
             corr_data = json.load(f)
             for category, corrections in corr_data.items():
@@ -37,7 +53,6 @@ if corr_file.exists():
     except Exception as e:
         print(f"警告: 无法加载修正配置: {e}")
 
-# 内置默认修正（作为备用）
 if not TEXT_CORRECTIONS:
     TEXT_CORRECTIONS = {
         "避允": "毕昇",
@@ -45,44 +60,37 @@ if not TEXT_CORRECTIONS:
         "音乐局": "Claude",
         "米游": "米哈游",
         "米友": "米哈游",
-        "原神": "原神",
         "崩铁": "星穹铁道",
         "崩三": "崩坏3",
-        "GPT": "GPT",
-        "GPT-4": "GPT-4",
-        "OpenAI": "OpenAI",
-        "Claude": "Claude",
-        "Anthropic": "Anthropic",
-        "Transformer": "Transformer",
-        "大模型": "大模型",
-        "GPU": "GPU",
-        "CPU": "CPU",
-        "AI": "AI",
-        "UI": "UI",
-        "API": "API",
     }
 
-# 创建目录
 for path in [OBSIDIAN_PATH, TEMP_PATH]:
-    path.mkdir(parents=True, exist_ok=True)
+    Path(path).mkdir(parents=True, exist_ok=True)
 
-# 添加 douyin-video 技能到路径
-skill_dir = Path(__file__).parent.parent / "douyin-video" / "scripts"
-sys.path.insert(0, str(skill_dir))
+sys.path.insert(0, str(SCRIPT_DIR))
 
-from douyin_downloader import get_video_info, download_video
+try:
+    from douyin_downloader import get_video_info, download_video
+except ImportError:
+    print("=" * 60)
+    print("❌ 错误: 找不到 douyin_downloader.py")
+    print("")
+    print("本 skill 依赖 douyin_downloader.py，请确保该文件与")
+    print("douyin_to_obsidian.py 在同一目录下。")
+    print("")
+    print(f"当前查找路径: {SCRIPT_DIR}")
+    print(f"该路径下文件: {list(SCRIPT_DIR.glob('*.py'))}")
+    print("=" * 60)
+    sys.exit(1)
 
 
 def correct_text(text):
-    """自动修正常见错字"""
     for wrong, correct in TEXT_CORRECTIONS.items():
         text = text.replace(wrong, correct)
     return text
 
 
 def setup_ffmpeg():
-    """设置 FFmpeg 路径"""
-    import os
     os.environ['PATH'] = str(TEMP_PATH) + os.pathsep + os.environ['PATH']
     try:
         import imageio_ffmpeg
@@ -95,7 +103,6 @@ def setup_ffmpeg():
 
 
 def extract_audio(video_path, audio_path=None):
-    """从视频中提取音频"""
     from moviepy import VideoFileClip
 
     if audio_path is None:
@@ -111,10 +118,8 @@ def extract_audio(video_path, audio_path=None):
 
 
 def transcribe_with_whisper(audio_path):
-    """使用 Whisper 进行语音识别（通过指定 Python 路径）"""
     setup_ffmpeg()
-    
-    # 先尝试直接导入
+
     try:
         import whisper
         print("正在加载 Whisper 模型...")
@@ -126,8 +131,7 @@ def transcribe_with_whisper(audio_path):
         return correct_text(result['text'])
     except ImportError:
         print(f"当前 Python 环境缺少 Whisper，尝试使用指定路径: {PYTHON_PATH}")
-        # 创建临时脚本
-        temp_script = TEMP_PATH / "_whisper_temp.py"
+        temp_script = Path(TEMP_PATH) / "_whisper_temp.py"
         with open(temp_script, 'w', encoding='utf-8') as f:
             f.write(f'''
 import whisper
@@ -138,12 +142,12 @@ model = whisper.load_model(model_name)
 print("正在识别语音...")
 result = model.transcribe(audio_path, language='zh')
 import json
-with open(r"{TEMP_PATH / 'whisper_result.json'}", 'w', encoding='utf-8') as f:
+with open(r"{Path(TEMP_PATH) / 'whisper_result.json'}", 'w', encoding='utf-8') as f:
     json.dump({{"text": result['text']}}, f)
 ''')
         try:
             subprocess.run([PYTHON_PATH, str(temp_script)], check=True)
-            with open(TEMP_PATH / 'whisper_result.json', 'r', encoding='utf-8') as f:
+            with open(Path(TEMP_PATH) / 'whisper_result.json', 'r', encoding='utf-8') as f:
                 result = json.load(f)
             text = result['text']
             text_len = len(text)
@@ -155,13 +159,11 @@ with open(r"{TEMP_PATH / 'whisper_result.json'}", 'w', encoding='utf-8') as f:
 
 
 def save_to_obsidian(video_id, title, transcript, video_url):
-    """保存到 Obsidian 目录"""
     date_str = datetime.now().strftime("%Y-%m-%d")
     safe_title = re.sub(r'[\\/:*?"<>|]', '_', title)[:50]
-    
-    # 保存原始转录文件
+
     transcript_path = OBSIDIAN_PATH / f"{date_str}-{video_id}.md"
-    
+
     frontmatter = f"""---
 title: {safe_title}
 tags: [抖音, 视频笔记, {date_str[:4]}]
@@ -179,21 +181,19 @@ date: {date_str}
 
 - 
 """
-    
+
     with open(transcript_path, 'w', encoding='utf-8') as f:
         f.write(frontmatter)
-    
+
     print(f"笔记已保存到 Obsidian: {transcript_path}")
     return transcript_path
 
 
 def process_douyin_video(link, keep_temp=False, no_audio=False):
-    """完整处理流程：下载、转录、保存到 Obsidian"""
     print("=" * 60)
-    print("抖音视频下载和转录工具（优化版）")
+    print("抖音视频下载和转录工具")
     print("=" * 60)
 
-    # 步骤1: 解析链接
     print("\n【步骤1】解析抖音链接...")
     video_info = get_video_info(link)
     video_id = video_info['video_id']
@@ -203,26 +203,21 @@ def process_douyin_video(link, keep_temp=False, no_audio=False):
 
     transcript = ""
     if not no_audio:
-        # 步骤2: 下载视频
         print("\n【步骤2】下载视频...")
         video_path = download_video(link, str(TEMP_PATH))
         print(f"视频已保存: {video_path}")
 
-        # 步骤3: 提取音频
         print("\n【步骤3】提取音频...")
         audio_path = extract_audio(video_path)
 
-        # 步骤4: 语音识别
         print("\n【步骤4】语音识别...")
         transcript = transcribe_with_whisper(audio_path)
     else:
         print("⚠️  跳过音频处理，仅保存视频信息")
 
-    # 步骤5: 保存到 Obsidian
     print("\n【步骤5】保存到 Obsidian...")
     note_path = save_to_obsidian(video_id, title, transcript, link)
 
-    # 清理临时文件（如果需要）
     if not keep_temp and not no_audio:
         print("\n【清理】删除视频和音频文件...")
         try:
@@ -252,7 +247,7 @@ def process_douyin_video(link, keep_temp=False, no_audio=False):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="抖音视频下载和转录工具（优化版）"
+        description="抖音视频下载和转录工具"
     )
 
     parser.add_argument("--link", "-l", required=True, help="抖音分享链接")
